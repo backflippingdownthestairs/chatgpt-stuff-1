@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Character with Hitbox, Physics, Enemies, Attacks, Fireballs, and Animations</title>
+    <style>
+        canvas {
+            background-color: #f0f0f0;
+            display: block;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        this.ISGrounded = true
+
+        const gravity = 0.5;
+        const friction = 0.8;
+
+        // Load GIFs for character animations
+        const idleSprite = new Image();
+        idleSprite.src = 'idle.gif';  // Replace with the path to your idle GIF
+
+        const moveSprite = new Image();
+        moveSprite.src = 'move.gif';  // Replace with the path to your move GIF
+
+        const jumpSprite = new Image();
+        jumpSprite.src = 'jump.gif';  // Replace with the path to your jump GIF
+
+        class Character {
+            constructor(x, y, width, height) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.dx = 0;
+                this.dy = 0;
+                this.isJumping = false;
+                this.isGrounded = true;
+                this.isAttacking = false;
+                this.currentSprite = idleSprite;
+                this.facingRight = true; // Direction the character is facing
+                this.movingLeft = false;
+                this.movingRight = false;
+            }
+
+            draw(camera) {
+                // Draw the character sprite
+                ctx.save();
+                ctx.translate(this.x - camera.x, this.y - camera.y);
+                if (!this.facingRight) {
+                    ctx.scale(-1, 1); // Flip sprite if facing left
+                }
+                ctx.drawImage(this.currentSprite, -this.width / 2, 0, this.width, this.height);
+                ctx.restore();
+            }
+
+            update() {
+                // Apply gravity
+                if (!this.isGrounded) {
+                    this.dy += gravity;
+                } else {
+                    this.dy = 0;
+                }
+
+                // Horizontal movement
+                if (this.movingLeft) {
+                    this.dx = -5;
+                    this.facingRight = false;
+                } else if (this.movingRight) {
+                    this.dx = 5;
+                    this.facingRight = true;
+                } else {
+                    this.dx = 0; // Stop moving if no movement keys are pressed
+                }
+
+                this.x += this.dx;
+                this.y += this.dy;
+
+                // Apply friction
+                this.dx *= friction;
+
+                // Sprite selection
+                if (this.isJumping) {
+                    this.currentSprite = jumpSprite;
+                } else if (this.movingLeft || this.movingRight) {
+                    this.currentSprite = moveSprite;
+                } else {
+                    this.currentSprite = idleSprite;
+                }
+
+                // Ground detection
+                if (this.y + this.height >= canvas.height - 50) {
+                    this.y = canvas.height - 50 - this.height;
+                    this.isGrounded = true;
+                    this.isJumping = false;
+                } else {
+                    this.isGrounded = false;
+                }
+            }
+
+            jump() {
+                if (this.isGrounded) {
+                    this.isJumping = true;
+                    this.isGrounded = false;
+                    this.dy = -12; // Adjusted jump height
+                }
+            }
+
+            moveLeft() {
+                this.movingLeft = true;
+            }
+
+            moveRight() {
+                this.movingRight = true;
+            }
+
+            stopMovingLeft() {
+                this.movingLeft = false;
+            }
+
+            stopMovingRight() {
+                this.movingRight = false;
+            }
+
+            attack(enemies) {
+                this.isAttacking = true;
+
+                // Check for collisions with enemies
+                enemies.forEach((enemy, index) => {
+                    if (this.x + this.width > enemy.x && this.x < enemy.x + enemy.width &&
+                        this.y + this.height > enemy.y && this.y < enemy.y + enemy.height) {
+                        enemies.splice(index, 1); // Remove the enemy if hit
+                    }
+                });
+
+                setTimeout(() => {
+                    this.isAttacking = false;
+                }, 200); // Attack duration
+            }
+
+            shootFireball(fireballs) {
+                const fireballX = this.x + (this.facingRight ? this.width / 2 : -10); // Position in front of the player
+                const fireballY = this.y + this.height / 2;
+                const fireballDx = this.facingRight ? 10 : -10;
+
+                const fireball = new Fireball(fireballX, fireballY, 10, 10, fireballDx);
+                fireballs.push(fireball);
+            }
+        }
+
+        class Fireball {
+            constructor(x, y, width, height, dx) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.dx = dx;
+            }
+
+            draw(camera) {
+                ctx.fillStyle = "orange";
+                ctx.fillRect(this.x - camera.x, this.y - camera.y, this.width, this.height);
+            }
+
+            update() {
+                this.x += this.dx;
+            }
+
+            checkCollision(enemies) {
+                enemies.forEach((enemy, index) => {
+                    if (this.x + this.width > enemy.x && this.x < enemy.x + enemy.width &&
+                        this.y + this.height > enemy.y && this.y < enemy.y + enemy.height) {
+                        enemies.splice(index, 1); // Remove the enemy if hit
+                        return true; // Fireball should disappear after hitting an enemy
+                    }
+                });
+                return false;
+            }
+        }
+
+        class Enemy {
+            constructor(x, y, width, height) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.dx = 2; // Speed of the enemy
+            }
+
+            draw(camera) {
+                ctx.fillStyle = "red";
+                ctx.fillRect(this.x - camera.x, this.y - camera.y, this.width, this.height);
+            }
+
+            update() {
+                this.x += this.dx;
+
+                // Reverse direction at boundaries
+                if (this.x <= 0 || this.x + this.width >= 2000) {
+                    this.dx *= -1;
+                }
+            }
+        }
+
+        class Camera {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+            }
+
+            follow(target) {
+                const targetX = target.x + target.width / 2 - canvas.width / 2;
+                this.x += (targetX - this.x) * 0.1;
+
+                this.y = 0;
+
+                if (this.x < 0) {
+                    this.x = 0;
+                } else if (this.x > 2000 - canvas.width) {
+                    this.x = 2000 - canvas.width;
+                }
+            }
+        }
+
+        const character = new Character(100, 300, 50, 50);
+        const camera = new Camera(0, 0);
+        const fireballs = [];
+
+        const enemies = [
+            new Enemy(400, canvas.height - 100, 50, 50),
+            new Enemy(800, canvas.height - 100, 50, 50),
+            new Enemy(1200, canvas.height - 100, 50, 50)
+        ];
+
+        function drawFloor(camera) {
+            ctx.fillStyle = "green";
+            ctx.fillRect(0 - camera.x, canvas.height - 50, 2000, 50);
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            character.update();
+            camera.follow(character);
+
+            drawFloor(camera);
+
+            character.draw(camera);
+
+            // Update and draw fireballs
+            for (let i = fireballs.length - 1; i >= 0; i--) {
+                fireballs[i].update();
+                if (fireballs[i].checkCollision(enemies)) {
+                    fireballs.splice(i, 1); // Remove fireball if it hits an enemy
+                } else if (fireballs[i].x < 0 || fireballs[i].x > 2000) {
+                    fireballs.splice(i, 1); // Remove fireball if it goes off-screen
+                } else {
+                    fireballs[i].draw(camera);
+                }
+            }
+
+            enemies.forEach(enemy => {
+                enemy.update();
+                enemy.draw(camera);
+            });
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "ArrowLeft") {
+                character.moveLeft();
+            } else if (event.key === "ArrowRight") {
+                character.moveRight();
+            } else if (event.key === "Space") {
+                character.jump();
+            } else if (event.key === "KeyA") { // Attack with 'A' key
+                character.attack(enemies);
+            } else if (event.key === "KeyF") { // Shoot fireball with 'F' key
+                character.shootFireball(fireballs);
+            }
+        });
+
+        document.addEventListener("keyup", (event) => {
+            if (event.key === "ArrowLeft") {
+                character.stopMovingLeft();
+            } else if (event.key === "ArrowRight") {
+                character.stopMovingRight();
+            }
+        });
+
+        gameLoop();
+    </script>
+</body>
+</html>
